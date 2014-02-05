@@ -1,4 +1,4 @@
 client
 ======
 
-Client PubSubSQL API
+Go client for PubSubSQL
