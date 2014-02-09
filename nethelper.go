@@ -18,34 +18,34 @@ import (
 )
 
 // message reader
-type NetHelper struct {
+type netHelper struct {
 	conn  net.Conn
 	bytes []byte
 }
 
-func NewNetHelper(conn net.Conn, bufferSize int) *NetHelper {
-	var ret NetHelper
-	ret.Set(conn, bufferSize)
+func newnetHelper(conn net.Conn, bufferSize int) *netHelper {
+	var ret netHelper
+	ret.set(conn, bufferSize)
 	return &ret
 }
 
-func (this *NetHelper) Set(conn net.Conn, bufferSize int) {
+func (this *netHelper) set(conn net.Conn, bufferSize int) {
 	this.conn = conn
 	this.bytes = make([]byte, bufferSize, bufferSize)
 }
 
-func (this *NetHelper) Close() {
+func (this *netHelper) close() {
 	if this.conn != nil {
 		this.conn.Close()
 		this.conn = nil
 	}
 }
 
-func (this *NetHelper) Valid() bool {
+func (this *netHelper) valid() bool {
 	return this.conn != nil
 }
 
-func (this *NetHelper) WriteMessage(bytes []byte) error {
+func (this *netHelper) writeMessage(bytes []byte) error {
 	leftToWrite := len(bytes)
 	for {
 		written, err := this.conn.Write(bytes)
@@ -61,17 +61,17 @@ func (this *NetHelper) WriteMessage(bytes []byte) error {
 	return nil
 }
 
-func (this *NetHelper) WriteHeaderAndMessage(requestId uint32, bytes []byte) error {
-	err := this.WriteMessage(NewNetHeader(uint32(len(bytes)), requestId).GetBytes())
+func (this *netHelper) writeHeaderAndMessage(requestId uint32, bytes []byte) error {
+	err := this.writeMessage(newNetHeader(uint32(len(bytes)), requestId).getBytes())
 	if err != nil {
 		return err
 	}
-	return this.WriteMessage(bytes)
+	return this.writeMessage(bytes)
 }
 
-func (this *NetHelper) ReadMessageTimeout(milliseconds int64) (*NetHeader, []byte, error, bool) {
+func (this *netHelper) readMessageTimeout(milliseconds int64) (*netHeader, []byte, error, bool) {
 	this.conn.SetReadDeadline(time.Now().Add(time.Duration(milliseconds) * time.Millisecond))
-	header, bytes, err := this.ReadMessage()
+	header, bytes, err := this.readMessage()
 	timedout := false
 	if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 		timedout = true
@@ -80,18 +80,18 @@ func (this *NetHelper) ReadMessageTimeout(milliseconds int64) (*NetHeader, []byt
 	return header, bytes, err, timedout
 }
 
-func (this *NetHelper) ReadMessage() (*NetHeader, []byte, error) {
+func (this *netHelper) readMessage() (*netHeader, []byte, error) {
 	// header
-	read, err := this.conn.Read(this.bytes[0:HEADER_SIZE])
+	read, err := this.conn.Read(this.bytes[0:_HEADER_SIZE])
 	if err != nil {
 		return nil, nil, err
 	}
-	if read < HEADER_SIZE {
+	if read < _HEADER_SIZE {
 		err = errors.New("Failed to read header.")
 		return nil, nil, err
 	}
-	var header NetHeader
-	header.ReadFrom(this.bytes)
+	var header netHeader
+	header.readFrom(this.bytes)
 	// prepare buffer
 	if len(this.bytes) < int(header.MessageSize) {
 		this.bytes = make([]byte, header.MessageSize, header.MessageSize)

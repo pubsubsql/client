@@ -24,38 +24,38 @@ import (
 --------------------+--------------------
 */
 
-type NetHeader struct {
+type netHeader struct {
 	MessageSize uint32
 	RequestId   uint32
 }
 
-var HEADER_SIZE = 8
-var EMPTY_HEADER = make([]byte, HEADER_SIZE, HEADER_SIZE)
+var _HEADER_SIZE = 8
+var _EMPTY_HEADER = make([]byte, _HEADER_SIZE, _HEADER_SIZE)
 
-func NewNetHeader(messageSize uint32, requestId uint32) *NetHeader {
-	return &NetHeader{
+func newNetHeader(messageSize uint32, requestId uint32) *netHeader {
+	return &netHeader{
 		MessageSize: messageSize,
 		RequestId:   requestId,
 	}
 }
 
-func (this *NetHeader) ReadFrom(bytes []byte) {
+func (this *netHeader) readFrom(bytes []byte) {
 	this.MessageSize = binary.BigEndian.Uint32(bytes)
 	this.RequestId = binary.BigEndian.Uint32(bytes[4:])
 }
 
-func (this *NetHeader) WriteTo(bytes []byte) {
+func (this *netHeader) writeTo(bytes []byte) {
 	binary.BigEndian.PutUint32(bytes, this.MessageSize)
 	binary.BigEndian.PutUint32(bytes[4:], this.RequestId)
 }
 
-func (this *NetHeader) GetBytes() []byte {
-	bytes := make([]byte, HEADER_SIZE, HEADER_SIZE)
-	this.WriteTo(bytes)
+func (this *netHeader) getBytes() []byte {
+	bytes := make([]byte, _HEADER_SIZE, _HEADER_SIZE)
+	this.writeTo(bytes)
 	return bytes
 }
 
-func (this *NetHeader) String() string {
+func (this *netHeader) String() string {
 	bytes, _ := json.Marshal(this)
 	return string(bytes)
 }

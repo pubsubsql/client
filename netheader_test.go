@@ -17,15 +17,15 @@ import (
 )
 
 func TestNetworkHeader(t *testing.T) {
-	header1 := NetHeader{
+	header1 := netHeader{
 		MessageSize: 32567,
 		RequestId:   9875235,
 	}
-	var header2 NetHeader
+	var header2 netHeader
 	bytes := make([]byte, 100, 100)
 	//
-	header1.WriteTo(bytes)
-	header2.ReadFrom(bytes)
+	header1.writeTo(bytes)
+	header2.readFrom(bytes)
 	//
 	if header1 != header2 {
 		t.Error("NetworkHeader data does not match")
