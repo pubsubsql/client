@@ -62,7 +62,6 @@ type Client struct {
 }
 
 //Connect connects the Client to the pubsubsql server.
-
 //Address string has the form host:port.
 func (this *Client) Connect(address string) bool {
 	this.address = address
@@ -94,7 +93,7 @@ func (this *Client) Ok() bool {
 	return this.err == ""
 }
 
-// Failed determines if the last command executed against the pubsubsql server failed. 
+//Failed determines if the last command executed against the pubsubsql server failed. 
 func (this *Client) Failed() bool {
 	return !this.Ok()
 }
@@ -151,7 +150,6 @@ func (this *Client) JSON() string {
 
 //Action returns an action string from the response 
 //returned by the last command executed against the pubsubsql server.
-
 //Valid actions are [status, insert, select, delete, update, add, remove, subscribe, unsubscribe]
 func (this *Client) Action() string {
 	return this.response.Action
@@ -171,9 +169,7 @@ func (this *Client) RowCount() int {
 }
 
 //NextRow is used to move to the next row in the result set returned by the pubsubsql server.    
-
 //When called for the first time, NextRow moves to the first row in the result set.
-
 //Returns false when all rows are read or if there is an error.
 //To find out if false was returned because of an error, use Ok or Failed functions. 
 func (this *Client) NextRow() bool {
@@ -255,7 +251,6 @@ func (this *Client) Columns() []string {
 
 //WaitForPubSub waits until the pubsubsql server publishes a message for
 // the subscribed Client or until the timeout interval elapses.
-
 //Returns false when timeout interval elapses or if there is and error.
 //To find out if false was returned because of an error, use Ok or Failed functions. 
 func (this *Client) WaitForPubSub(timeout int) bool {
