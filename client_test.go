@@ -418,7 +418,7 @@ func insertRow() {
 	client := new(Client)
 	ASSERT_CONNECT(client, ADDRESS, true)
 	command := fmt.Sprintf("insert into %v (col1, col2, col3) values (1:col1, 1:col2, 1:col3)", TABLE)
-	ASSERT_EXECUTE(client, command, true)
+	ASSERT_STREAM(client, command, true)
 	ASSERT_DISCONNECT(client)
 }
 
@@ -465,6 +465,15 @@ func ASSERT_CONNECTED(client *Client, expected bool) {
 
 func ASSERT_EXECUTE(client *Client, command string, expected bool) {
 	got := client.Execute(command)
+	if expected != got {
+		fail(fmt.Sprintf("ASSERT_EXECUTE failed: expected %v got %v", expected, got))
+	}
+	iferror(client, expected, got)
+	VALIDATE_RESULT(client, got)
+}
+
+func ASSERT_STREAM(client *Client, command string, expected bool) {
+	got := client.Stream(command)
 	if expected != got {
 		fail(fmt.Sprintf("ASSERT_EXECUTE failed: expected %v got %v", expected, got))
 	}
@@ -581,3 +590,5 @@ func ASSERT_PUBSUB_RESULT_SET(client *Client, pubsubid string, action string, ro
 		}
 	}
 }
+
+
