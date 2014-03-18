@@ -142,7 +142,7 @@ func (this *Client) Execute(command string) bool {
 	return ok
 }
 
-//Stream sends a command against the pubsubsql server and returns true on success.
+//Stream sends a command to the pubsubsql server and returns true on success.
 //The pubsubsql server does not return a response to the Client.
 func (this *Client) Stream(command string) bool {
 	this.reset()
