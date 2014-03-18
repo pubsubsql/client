@@ -34,16 +34,16 @@ type responseData struct {
 	Data     [][]string
 }
 
-func (this *responseData) reset() {
-	this.Status = ""
-	this.Msg = ""
-	this.Action = ""
-	this.PubSubId = ""
-	this.Rows = 0
-	this.Fromrow = 0
-	this.Torow = 0
-	this.Columns = nil
-	this.Data = nil
+func (c *responseData) reset() {
+	c.Status = ""
+	c.Msg = ""
+	c.Action = ""
+	c.PubSubId = ""
+	c.Rows = 0
+	c.Fromrow = 0
+	c.Torow = 0
+	c.Columns = nil
+	c.Data = nil
 }
 
 type Client struct {
@@ -63,79 +63,79 @@ type Client struct {
 
 //Connect connects the Client to the pubsubsql server.
 //Address string has the form host:port.
-func (this *Client) Connect(address string) bool {
-	this.address = address
-	this.Disconnect()
-	conn, err := net.DialTimeout("tcp", this.address, time.Millisecond*1000)
+func (c *Client) Connect(address string) bool {
+	c.address = address
+	c.Disconnect()
+	conn, err := net.DialTimeout("tcp", c.address, time.Millisecond*1000)
 	if err != nil {
-		this.setError(err)
+		c.setError(err)
 		return false
 	}
-	this.rw.set(conn, _CLIENT_DEFAULT_BUFFER_SIZE)
+	c.rw.set(conn, _CLIENT_DEFAULT_BUFFER_SIZE)
 	return true
 }
 
 //Disconnect disconnects the Client from the pubsubsql server.
-func (this *Client) Disconnect() {
-	this.write("close")
+func (c *Client) Disconnect() {
+	c.write("close")
 	// write may generate error so we reset after instead
-	this.reset()
-	this.rw.close()
+	c.reset()
+	c.rw.close()
 }
 
 //Connected returns true if the Client is currently connected to the pubsubsql server.
-func (this *Client) Connected() bool {
-	return this.rw.valid()
+func (c *Client) Connected() bool {
+	return c.rw.valid()
 }
 
 //Ok determines if the last command executed against the pubsubsql server succeeded. 
-func (this *Client) Ok() bool {
-	return this.err == ""
+func (c *Client) Ok() bool {
+	return c.err == ""
 }
 
 //Failed determines if the last command executed against the pubsubsql server failed. 
-func (this *Client) Failed() bool {
-	return !this.Ok()
+func (c *Client) Failed() bool {
+	return !c.Ok()
 }
 
 //Error returns an error message when the last command executed against 
 //the pubsubsql server fails.
 
 //Functions that may generate an error are [Connect, Execute, NextRow, WaitForPubSub]
-func (this *Client) Error() string {
-	return this.err
+func (c *Client) Error() string {
+	return c.err
 }
 
 //Execute executes a command against the pubsubsql server and returns true on success.
 //The pubsubsql server returns to the Client a response in JSON format.
-func (this *Client) Execute(command string) bool {
-	this.reset()
-	ok := this.write(command)
+func (c *Client) Execute(command string) bool {
+	c.reset()
+	ok := c.write(command)
 	var bytes []byte
 	var header *netHeader
 	for ok {
-		this.reset()
-		header, bytes, ok = this.read()
+		c.reset()
+		header, bytes, ok = c.read()
 		if !ok {
 			break
 		}
-		if header.RequestId == this.requestId {
+		if header.RequestId == c.requestId {
 			// response we are waiting for
-			return this.unmarshalJSON(bytes)
+			return c.unmarshalJSON(bytes)
 		} else if header.RequestId == 0 {
 			// pubsub action, save it and skip it for now
 			// will be proccesed next time WaitPubSub is called
 			//WE MUST COPY BYTES SINCE THEY ARE REUSED IN NetHelper
 			t := make([]byte, header.MessageSize, header.MessageSize)
 			copy(t, bytes[0:header.MessageSize])
-			this.backlog.PushBack(t)
-		} else if header.RequestId < this.requestId {
+			c.backlog.PushBack(t)
+		} else if header.RequestId < c.requestId {
 			// we did not read full result set from previous command ignore it or report error?
 			// for now lets ignore it, continue reading until we hit our request id 
-			this.reset()
+			c.reset()
 		} else {
-			// this should never happen
-			this.setErrorString("protocol error invalid requestId")
+			// c should never happen
+			c.setErrorString("protocol error invalid requestId")
 			ok = false
 		}
 	}
@@ -144,227 +144,227 @@ func (this *Client) Execute(command string) bool {
 
 //Stream sends a command to the pubsubsql server and returns true on success.
 //The pubsubsql server does not return a response to the Client.
-func (this *Client) Stream(command string) bool {
-	this.reset()
+func (c *Client) Stream(command string) bool {
+	c.reset()
 	//TODO optimize
-	return this.write("stream " + command)
+	return c.write("stream " + command)
 }
 
 //JSON returns a response string in JSON format from the 
 //last command executed against the pubsubsql server.
-func (this *Client) JSON() string {
-	return string(this.rawjson)
+func (c *Client) JSON() string {
+	return string(c.rawjson)
 }
 
 //Action returns an action string from the response 
 //returned by the last command executed against the pubsubsql server.
 //Valid actions are [status, insert, select, delete, update, add, remove, subscribe, unsubscribe]
-func (this *Client) Action() string {
-	return this.response.Action
+func (c *Client) Action() string {
+	return c.response.Action
 }
 
 //PubSubId returns a unique identifier generated by the pubsubsql server when 
 //a Client subscribes to a table. If the client has subscribed to more than  one table, 
 //PubSubId should be used by the Client to uniquely identify messages 
 //published by the pubsubsql server.
-func (this *Client) PubSubId() string {
-	return this.response.PubSubId
+func (c *Client) PubSubId() string {
+	return c.response.PubSubId
 }
 
 //RowCount returns the number of rows in the result set returned by the pubsubsql server.
-func (this *Client) RowCount() int {
-	return this.response.Rows
+func (c *Client) RowCount() int {
+	return c.response.Rows
 }
 
 //NextRow is used to move to the next row in the result set returned by the pubsubsql server.    
 //When called for the first time, NextRow moves to the first row in the result set.
 //Returns false when all rows are read or if there is an error.
 //To find out if false was returned because of an error, use Ok or Failed functions. 
-func (this *Client) NextRow() bool {
-	for this.Ok() {
+func (c *Client) NextRow() bool {
+	for c.Ok() {
 		// no result set
-		if this.response.Rows == 0 {
+		if c.response.Rows == 0 {
 			return false
 		}
-		if this.response.Fromrow == 0 || this.response.Torow == 0 {
+		if c.response.Fromrow == 0 || c.response.Torow == 0 {
 			return false
 		}
 		// the current record is valid 
-		this.record++
-		if this.record <= (this.response.Torow - this.response.Fromrow) {
+		c.record++
+		if c.record <= (c.response.Torow - c.response.Fromrow) {
 			return true
 		}
 		// we reached the end of result set
-		if this.response.Rows == this.response.Torow {
+		if c.response.Rows == c.response.Torow {
 			// gaurd against over fill
-			this.record--
+			c.record--
 			return false
 		}
 		// if we are here there is another batch 
-		this.reset()
-		header, bytes, ok := this.read()
+		c.reset()
+		header, bytes, ok := c.read()
 		if !ok {
 			return false
 		}
 		// should not happen but check anyway
 		// when RequestId is 0 it means we are reading published data
-		if header.RequestId > 0 && header.RequestId != this.requestId {
-			this.setErrorString("protocol error")
+		if header.RequestId > 0 && header.RequestId != c.requestId {
+			c.setErrorString("protocol error")
 			return false
 		}
 		// we got another batch unmarshall the data	
-		this.unmarshalJSON(bytes)
+		c.unmarshalJSON(bytes)
 	}
 	return false
 }
 
 //Value returns the value within the current row for the given column name.
 //If the column name does not exist, Value returns an empty string.	
-func (this *Client) Value(column string) string {
-	ordinal, ok := this.columns[column]
+func (c *Client) Value(column string) string {
+	ordinal, ok := c.columns[column]
 	if !ok {
 		return ""
 	}
-	return this.ValueByOrdinal(ordinal)
+	return c.ValueByOrdinal(ordinal)
 }
 
 //ValueByOrdinal returns the value within the current row for the given column ordinal.
 //The column ordinal represents the zero based position of the column in the Columns collection of the result set.
 //If the column ordinal is out of range, ValueByOrdinal returns an empty string.	
-func (this *Client) ValueByOrdinal(ordinal int) string {
-	if this.record < 0 || this.record >= len(this.response.Data) {
+func (c *Client) ValueByOrdinal(ordinal int) string {
+	if c.record < 0 || c.record >= len(c.response.Data) {
 		return ""
 	}
-	if ordinal >= len(this.response.Data[this.record]) {
+	if ordinal >= len(c.response.Data[c.record]) {
 		return ""
 	}
-	return this.response.Data[this.record][ordinal]
+	return c.response.Data[c.record][ordinal]
 }
 
 //HasColumn determines if the column name exists in the columns collection of the result set.
-func (this *Client) HasColumn(column string) bool {
-	_, ok := this.columns[column]
+func (c *Client) HasColumn(column string) bool {
+	_, ok := c.columns[column]
 	return ok
 }
 
 //ColumnCount returns the number of columns in the columns collection of the result set. 
-func (this *Client) ColumnCount() int {
-	return len(this.response.Columns)
+func (c *Client) ColumnCount() int {
+	return len(c.response.Columns)
 }
 
 //Columns returns the column names in the columns collection of the result set. 
-func (this *Client) Columns() []string {
-	return this.response.Columns
+func (c *Client) Columns() []string {
+	return c.response.Columns
 }
 
 //WaitForPubSub waits until the pubsubsql server publishes a message for
 // the subscribed Client or until the timeout interval elapses.
 //Returns false when timeout interval elapses or if there is and error.
 //To find out if false was returned because of an error, use Ok or Failed functions. 
-func (this *Client) WaitForPubSub(timeout int) bool {
+func (c *Client) WaitForPubSub(timeout int) bool {
 	var bytes []byte
 	for {
-		this.reset()
+		c.reset()
 		// process backlog first	
-		bytes = this.popBacklog()
+		bytes = c.popBacklog()
 		if len(bytes) > 0 {
-			return this.unmarshalJSON(bytes)
+			return c.unmarshalJSON(bytes)
 		}
-		header, temp, success, timedout := this.readTimeout(int64(timeout))
+		header, temp, success, timedout := c.readTimeout(int64(timeout))
 		bytes = temp
 		if !success || timedout {
 			return false
 		}
 		if header.RequestId == 0 {
-			return this.unmarshalJSON(bytes)
+			return c.unmarshalJSON(bytes)
 		}
-		// this is not pubsub message; are we reading abandoned cursor?
+		// c is not pubsub message; are we reading abandoned cursor?
 		// ignore and keep trying
 	}
 	return false
 }
 
-func (this *Client) popBacklog() []byte {
-	element := this.backlog.Front()
+func (c *Client) popBacklog() []byte {
+	element := c.backlog.Front()
 	if element != nil {
 		bytes := element.Value.([]byte)
-		this.backlog.Remove(element)
+		c.backlog.Remove(element)
 		return bytes
 	}
 	return nil
 }
 
-func (this *Client) unmarshalJSON(bytes []byte) bool {
-	this.rawjson = bytes
-	err := json.Unmarshal(bytes, &this.response)
+func (c *Client) unmarshalJSON(bytes []byte) bool {
+	c.rawjson = bytes
+	err := json.Unmarshal(bytes, &c.response)
 	if err != nil {
-		this.setError(err)
+		c.setError(err)
 		return false
 	}
-	if this.response.Status != "ok" {
-		this.setErrorString(this.response.Msg)
+	if c.response.Status != "ok" {
+		c.setErrorString(c.response.Msg)
 		return false
 	}
-	this.setColumns()
+	c.setColumns()
 	return true
 }
 
-func (this *Client) setColumns() {
-	if len(this.response.Columns) == 0 {
+func (c *Client) setColumns() {
+	if len(c.response.Columns) == 0 {
 		return
 	}
-	this.columns = make(map[string]int, cap(this.response.Columns))
-	for ordinal, column := range this.response.Columns {
-		this.columns[column] = ordinal
+	c.columns = make(map[string]int, cap(c.response.Columns))
+	for ordinal, column := range c.response.Columns {
+		c.columns[column] = ordinal
 	}
 }
 
-func (this *Client) reset() {
-	this.resetError()
-	this.response.reset()
-	this.rawjson = nil
-	this.record = -1
+func (c *Client) reset() {
+	c.resetError()
+	c.response.reset()
+	c.rawjson = nil
+	c.record = -1
 }
 
-func (this *Client) resetError() {
-	this.err = ""
+func (c *Client) resetError() {
+	c.err = ""
 }
 
-func (this *Client) setErrorString(err string) {
-	this.reset()
-	this.err = err
+func (c *Client) setErrorString(err string) {
+	c.reset()
+	c.err = err
 }
 
-func (this *Client) setError(err error) {
-	this.setErrorString(err.Error())
+func (c *Client) setError(err error) {
+	c.setErrorString(err.Error())
 }
 
-func (this *Client) write(message string) bool {
-	this.requestId++
-	if !this.rw.valid() {
-		this.setErrorString("Not connected")
+func (c *Client) write(message string) bool {
+	c.requestId++
+	if !c.rw.valid() {
+		c.setErrorString("Not connected")
 		return false
 	}
-	err := this.rw.writeHeaderAndMessage(this.requestId, []byte(message))
+	err := c.rw.writeHeaderAndMessage(c.requestId, []byte(message))
 	if err != nil {
-		this.setError(err)
+		c.setError(err)
 		return false
 	}
 	return true
 }
 
-func (this *Client) readTimeout(timeout int64) (*netHeader, []byte, bool, bool) {
-	if !this.rw.valid() {
-		this.setErrorString("Not connected")
+func (c *Client) readTimeout(timeout int64) (*netHeader, []byte, bool, bool) {
+	if !c.rw.valid() {
+		c.setErrorString("Not connected")
 		return nil, nil, false, false
 	}
-	header, bytes, err, timedout := this.rw.readMessageTimeout(timeout)
+	header, bytes, err, timedout := c.rw.readMessageTimeout(timeout)
 	if timedout {
 		return nil, nil, true, true
 	}
 	// error
 	if err != nil {
-		this.setError(err)
+		c.setError(err)
 		return nil, nil, false, false
 	}
 	// success
@@ -372,11 +372,11 @@ func (this *Client) readTimeout(timeout int64) (*netHeader, []byte, bool, bool) 
 
 }
 
-func (this *Client) read() (*netHeader, []byte, bool) {
+func (c *Client) read() (*netHeader, []byte, bool) {
 	var MAX_READ_TIMEOUT_MILLISECONDS int64 = 1000 * 60 * 3
-	header, bytes, success, timedout := this.readTimeout(MAX_READ_TIMEOUT_MILLISECONDS)
+	header, bytes, success, timedout := c.readTimeout(MAX_READ_TIMEOUT_MILLISECONDS)
 	if timedout {
-		this.setErrorString("Read timed out")
+		c.setErrorString("Read timed out")
 		return nil, nil, false
 	}
 	return header, bytes, success
