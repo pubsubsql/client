@@ -57,7 +57,7 @@ func TestInsertOneRow(t *testing.T) {
 	newtable()
 	client := new(Client)
 	ASSERT_CONNECT(client, ADDRESS, true)
-	command := fmt.Sprintf("insert into %v (col1, col2, col3) values (1:col1, 1:col2, 1:col3)", TABLE)
+	command := fmt.Sprintf("insert into %v (col1, col2, col3) values (1:col1, 1:col2, 1:col3) returning *", TABLE)
 	ASSERT_EXECUTE(client, command, true)
 	ASSERT_ACTION(client, "insert")
 	ASSERT_ROW_COUNT(client, 1)
@@ -79,7 +79,7 @@ func TestInsertManyRows(t *testing.T) {
 	newtable()
 	client := new(Client)
 	ASSERT_CONNECT(client, ADDRESS, true)
-	command := fmt.Sprintf("insert into %v (col1, col2, col3) values (1:col1, 1:col2, 1:col3)", TABLE)
+	command := fmt.Sprintf("insert into %v (col1, col2, col3) values (1:col1, 1:col2, 1:col3) returning *", TABLE)
 	for r := 0; r < ROWS; r++ {
 		ASSERT_EXECUTE(client, command, true)
 		ASSERT_ACTION(client, "insert")
