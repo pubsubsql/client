@@ -44,6 +44,7 @@ func (c *responseData) reset() {
 	c.Torow = 0
 	c.Columns = nil
 	c.Data = nil
+	c.Id = ""
 }
 
 type Client struct {
