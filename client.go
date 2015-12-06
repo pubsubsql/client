@@ -14,6 +14,8 @@ package pubsubsql
 import (
 	"container/list"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"time"
 )
@@ -51,7 +53,6 @@ type Client struct {
 	address   string
 	rw        netHelper
 	requestId uint32
-	err       string
 	rawjson   []byte
 	//
 	response responseData
@@ -64,17 +65,16 @@ type Client struct {
 
 //Connect connects the Client to the pubsubsql server.
 //Address string has the form host:port.
-func (c *Client) Connect(address string) bool {
+func (c *Client) Connect(address string) error {
 	c.address = address
 	c.Disconnect()
 	conn, err := net.DialTimeout("tcp", c.address, time.Millisecond*1000)
 	if err != nil {
-		c.setError(err)
-		return false
+		return err
 	}
 	c.rw.set(conn, _CLIENT_DEFAULT_BUFFER_SIZE)
 
-	return true
+	return nil
 }
 
 //Disconnect disconnects the Client from the pubsubsql server.
@@ -90,37 +90,24 @@ func (c *Client) Connected() bool {
 	return c.rw.valid()
 }
 
-//Ok determines if the last command executed against the pubsubsql server succeeded.
-func (c *Client) Ok() bool {
-	return c.err == ""
-}
-
-//Failed determines if the last command executed against the pubsubsql server failed.
-func (c *Client) Failed() bool {
-	return !c.Ok()
-}
-
-//Error returns an error message when the last command executed against
-//the pubsubsql server fails.
-
-//Functions that may generate an error are [Connect, Execute, NextRow, WaitForPubSub]
-func (c *Client) Error() string {
-	return c.err
-}
-
 //Execute executes a command against the pubsubsql server and returns true on success.
 //The pubsubsql server returns to the Client a response in JSON format.
-func (c *Client) Execute(command string) bool {
+func (c *Client) Execute(command string) error {
 	c.reset()
-	ok := c.write(command)
+	err := c.write(command)
+	if err != nil {
+		return err
+	}
+
 	var bytes []byte
 	var header *netHeader
-	for ok {
+	for {
 		c.reset()
-		header, bytes, ok = c.read()
-		if !ok {
+		header, bytes, err = c.read()
+		if err != nil {
 			break
 		}
+
 		if header.RequestId == c.requestId {
 			// response we are waiting for
 			return c.unmarshalJSON(bytes)
@@ -137,16 +124,16 @@ func (c *Client) Execute(command string) bool {
 			c.reset()
 		} else {
 			// c should never happen
-			c.setErrorString("protocol error invalid requestId")
-			ok = false
+			return errors.New("protocol error invalid requestId")
 		}
 	}
-	return ok
+
+	return err
 }
 
 //Stream sends a command to the pubsubsql server and returns true on success.
 //The pubsubsql server does not return a response to the Client.
-func (c *Client) Stream(command string) bool {
+func (c *Client) Stream(command string) error {
 	c.reset()
 	//TODO optimize
 	return c.write("stream " + command)
@@ -182,42 +169,44 @@ func (c *Client) RowCount() int {
 //When called for the first time, NextRow moves to the first row in the result set.
 //Returns false when all rows are read or if there is an error.
 //To find out if false was returned because of an error, use Ok or Failed functions.
-func (c *Client) NextRow() bool {
-	for c.Ok() {
+func (c *Client) NextRow() (bool, error) {
+	for {
 		// no result set
 		if c.response.Rows == 0 {
-			return false
+			return false, nil
 		}
 		if c.response.Fromrow == 0 || c.response.Torow == 0 {
-			return false
+			return false, nil
 		}
 		// the current record is valid
 		c.record++
 		if c.record <= (c.response.Torow - c.response.Fromrow) {
-			return true
+			return true, nil
 		}
 		// we reached the end of result set
 		if c.response.Rows == c.response.Torow {
 			// gaurd against over fill
 			c.record--
-			return false
+			return false, nil
 		}
 		// if we are here there is another batch
 		c.reset()
-		header, bytes, ok := c.read()
-		if !ok {
-			return false
+		header, bytes, err := c.read()
+		if err != nil {
+			return false, err
 		}
 		// should not happen but check anyway
 		// when RequestId is 0 it means we are reading published data
 		if header.RequestId > 0 && header.RequestId != c.requestId {
-			c.setErrorString("protocol error")
-			return false
+			return false, errors.New("protocol error")
 		}
 		// we got another batch unmarshall the data
-		c.unmarshalJSON(bytes)
+		err = c.unmarshalJSON(bytes)
+		if err != nil {
+			return false, err
+		}
 	}
-	return false
+	return false, nil
 }
 
 //Value returns the value within the current row for the given column name.
@@ -263,7 +252,7 @@ func (c *Client) Columns() []string {
 // the subscribed Client or until the timeout interval elapses.
 //Returns false when timeout interval elapses or if there is and error.
 //To find out if false was returned because of an error, use Ok or Failed functions.
-func (c *Client) WaitForPubSub(timeout int) bool {
+func (c *Client) WaitForPubSub(timeout int) error {
 	var bytes []byte
 	for {
 		c.reset()
@@ -272,10 +261,13 @@ func (c *Client) WaitForPubSub(timeout int) bool {
 		if len(bytes) > 0 {
 			return c.unmarshalJSON(bytes)
 		}
-		header, temp, success, timedout := c.readTimeout(int64(timeout))
+		header, temp, err, timedout := c.readTimeout(int64(timeout))
 		bytes = temp
-		if !success || timedout {
-			return false
+		if err != nil {
+			return err
+		}
+		if timedout {
+			return errors.New("Timeout")
 		}
 		if header.RequestId == 0 {
 			return c.unmarshalJSON(bytes)
@@ -283,7 +275,7 @@ func (c *Client) WaitForPubSub(timeout int) bool {
 		// c is not pubsub message; are we reading abandoned cursor?
 		// ignore and keep trying
 	}
-	return false
+	return nil
 }
 
 func (c *Client) popBacklog() []byte {
@@ -296,19 +288,17 @@ func (c *Client) popBacklog() []byte {
 	return nil
 }
 
-func (c *Client) unmarshalJSON(bytes []byte) bool {
+func (c *Client) unmarshalJSON(bytes []byte) error {
 	c.rawjson = bytes
 	err := json.Unmarshal(bytes, &c.response)
 	if err != nil {
-		c.setError(err)
-		return false
+		return err
 	}
 	if c.response.Status != "ok" {
-		c.setErrorString(c.response.Msg)
-		return false
+		return errors.New(fmt.Sprintf("response error: %s", c.response.Msg))
 	}
 	c.setColumns()
-	return true
+	return nil
 }
 
 func (c *Client) setColumns() {
@@ -322,64 +312,38 @@ func (c *Client) setColumns() {
 }
 
 func (c *Client) reset() {
-	c.resetError()
 	c.response.reset()
 	c.rawjson = nil
 	c.record = -1
 }
 
-func (c *Client) resetError() {
-	c.err = ""
-}
-
-func (c *Client) setErrorString(err string) {
-	c.reset()
-	c.err = err
-}
-
-func (c *Client) setError(err error) {
-	c.setErrorString(err.Error())
-}
-
-func (c *Client) write(message string) bool {
+func (c *Client) write(message string) error {
 	c.requestId++
 	if !c.rw.valid() {
-		c.setErrorString("Not connected")
-		return false
+		return errors.New("Not connected")
 	}
 	err := c.rw.writeHeaderAndMessage(c.requestId, []byte(message))
 	if err != nil {
-		c.setError(err)
-		return false
+		return err
 	}
-	return true
+	return nil
 }
 
-func (c *Client) readTimeout(timeout int64) (*netHeader, []byte, bool, bool) {
+func (c *Client) readTimeout(timeout int64) (header *netHeader, bytes []byte, err error, timedout bool) {
 	if !c.rw.valid() {
-		c.setErrorString("Not connected")
-		return nil, nil, false, false
+		err = errors.New("Not connected")
+		return
 	}
-	header, bytes, err, timedout := c.rw.readMessageTimeout(timeout)
-	if timedout {
-		return nil, nil, true, true
-	}
-	// error
-	if err != nil {
-		c.setError(err)
-		return nil, nil, false, false
-	}
-	// success
-	return header, bytes, true, false
-
+	header, bytes, err, timedout = c.rw.readMessageTimeout(timeout)
+	return
 }
 
-func (c *Client) read() (*netHeader, []byte, bool) {
+func (c *Client) read() (header *netHeader, bytes []byte, err error) {
 	var MAX_READ_TIMEOUT_MILLISECONDS int64 = 1000 * 60 * 3
-	header, bytes, success, timedout := c.readTimeout(MAX_READ_TIMEOUT_MILLISECONDS)
-	if timedout {
-		c.setErrorString("Read timed out")
-		return nil, nil, false
+	header, bytes, err, timeout := c.readTimeout(MAX_READ_TIMEOUT_MILLISECONDS)
+	if timeout {
+		err = errors.New("Read timed out")
 	}
-	return header, bytes, success
+
+	return
 }
