@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"time"
 )
@@ -254,22 +255,28 @@ func (c *Client) Columns() []string {
 //To find out if false was returned because of an error, use Ok or Failed functions.
 func (c *Client) WaitForPubSub(timeout int) error {
 	var bytes []byte
+	log.Println("Waiting for PUB SUB...")
 	for {
 		c.reset()
 		// process backlog first
 		bytes = c.popBacklog()
 		if len(bytes) > 0 {
+			fmt.Println("backlog has data, returning that data")
 			return c.unmarshalJSON(bytes)
 		}
 		header, temp, err, timedout := c.readTimeout(int64(timeout))
 		bytes = temp
 		if err != nil {
+			log.Println("error")
 			return err
 		}
 		if timedout {
+			log.Println("timed out")
 			return errors.New("Timeout")
 		}
+		log.Printf("got header request id: %d\n", header.RequestId)
 		if header.RequestId == 0 {
+			log.Println("got data")
 			return c.unmarshalJSON(bytes)
 		}
 		// c is not pubsub message; are we reading abandoned cursor?
